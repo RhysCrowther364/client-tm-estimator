@@ -1,0 +1,23 @@
+# Local runtime databases, patent cache & user settings (never commit client runs or keys)
+data/
+*.db
+*.db-shm
+*.db-wal
+.env
+
+# Python bytecode & virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# PyInstaller build artifacts & large compiled executables
+build/
+dist/
+release/*.exe
+
+# OS / Editor files
+.DS_Store
+Thumbs.db

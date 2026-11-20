@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RWS | Trados TM Suitability &amp; RTE Estimator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="icon" type="image/png" href="/static/icon.png" />
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script src="/static/vendor/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Left Sidebar: Galaxy Purple RWS Statement Wall -->
+    <aside class="sidebar">
+      <div class="sidebar-top-content">
+        <div class="brand">
+          <!-- Official RWS 2025 White Illuminated Outline Logomark + Wordmark (for Galaxy Purple surface) -->
+          <svg class="rws-logo-svg" viewBox="0 0 148 56" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="RWS">
+            <path d="M11.39 40.61 A15 15 0 1 1 32.61 40.61 L22 51.21 Z" stroke="#FFFFFF" stroke-width="2.6" stroke-linejoin="round" />
+            <path d="M31 36 A15 15 0 1 1 41.61 31.61 L31 42.21 Z" stroke="#FFFFFF" stroke-width="2.6" stroke-linejoin="round" />
+            <text x="56" y="39" fill="#FFFFFF" font-family="'Plus Jakarta Sans', 'Inter', sans-serif" font-weight="800" font-size="34" letter-spacing="-1.2">rws</text>
+          </svg>
+          <div class="brand-product-tag">IP Sales &bull; Trados Suitability</div>
+        </div>
+
+        <div class="sidebar-actions">
+          <button id="btn-new-assessment" class="btn btn-pink btn-block">
+            + New Client Assessment
+          </button>
+        </div>
+
+        <div class="api-status-box" id="api-status-box">
+          <span class="status-dot" id="epo-status-dot"></span>
+          <span id="epo-status-label">Google Patents Live Ready</span>
+          <button id="btn-open-settings" class="btn-icon" title="Configure Rate Card, Local Cache &amp; Settings">&#9881;</button>
+        </div>
+
+        <div class="history-header">Recent Assessments</div>
+      </div>
+
+      <div id="job-history-list" class="history-list">
+        <div class="empty-history">No assessments run yet.</div>
+      </div>
+
+      <div class="sidebar-footer">
+        <span>Unlock global understanding<span class="rws-dot">.</span></span>
+      </div>
+
+      <!-- Cropped RWS Brand Book Overlapping Circles Decal -->
+      <div class="sidebar-decal" aria-hidden="true">
+        <div class="decal-circle decal-pink"></div>
+        <div class="decal-circle decal-blue"></div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Top Brand Bar on Light Canvas -->
+      <header class="top-brand-strip">
+        <div class="top-strapline">TRADOS STUDIO 22 &bull; TM &amp; RTE SUITABILITY</div>
+        <!-- Primary Full-Colour RWS Logomark + Black Wordmark on light surface -->
+        <div class="top-mini-brand">
+          <svg width="86" height="32" viewBox="0 0 148 56" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <defs>
+              <clipPath id="rwsPinClip">
+                <path d="M11.39 40.61 A15 15 0 1 1 32.61 40.61 L22 51.21 Z" />
+              </clipPath>
+            </defs>
+            <path d="M11.39 40.61 A15 15 0 1 1 32.61 40.61 L22 51.21 Z" fill="#7B5CF5" />
+            <path d="M31 36 A15 15 0 1 1 41.61 31.61 L31 42.21 Z" fill="#E60050" />
+            <path d="M31 36 A15 15 0 1 1 41.61 31.61 L31 42.21 Z" clip-path="url(#rwsPinClip)" fill="#38006B" />
+            <text x="56" y="39" fill="#0B0B0F" font-family="'Plus Jakarta Sans', 'Inter', sans-serif" font-weight="800" font-size="34" letter-spacing="-1.2">rws</text>
+          </svg>
+        </div>
+      </header>
+
+      <!-- VIEW 1: New Assessment Form -->
+      <section id="view-new" class="view-section">
+        <div class="page-header">
+          <div>
+            <h1>Find what you’re looking for<span class="rws-dot">.</span></h1>
+            <p class="subtitle">
+              Enter a client name to retrieve their recent patent families (1 per family), build a sequential rolling TM from oldest to newest, and download a client-ready <strong>RWS Branded PDF Suitability Report</strong>.
+            </p>
+          </div>
+        </div>
+
+        <div class="mode-tabs">
+          <button class="mode-tab active" data-tab="search-tab">Search Patent Database</button>
+          <button class="mode-tab" data-tab="upload-tab">Upload Patent Files (.zip / .docx / .xml / .txt)</button>
+        </div>
+
+        <!-- Tab A: Live Patent Database Search -->
+        <form id="form-create-job" class="card form-card">
+          <div class="form-row">
+            <div class="form-group flex-2">
+              <label for="input-client-name">Client / Applicant Name (or Patent Publication Numbers)</label>
+              <div class="input-with-btn">
+                <input
+                  type="text"
+                  id="input-client-name"
+                  placeholder="e.g., AstraZeneca, Procter &amp; Gamble, or WO2025110491A1, EP4200317A1..."
+                  required
+                  autocomplete="off"
+                />
+                <button type="button" id="btn-verify-applicants" class="btn btn-secondary">
+                  Verify Entities
+                </button>
+              </div>
+              <span class="field-hint">Enter a client name (click <em>Verify Entities</em> to select legal entity spellings) or paste publication numbers directly.</span>
+            </div>
+
+            <div class="form-group">
+              <label for="select-language">Source Language</label>
+              <select id="select-language">
+                <option value="EN" selected>English (EN)</option>
+                <option value="DE">German (DE)</option>
+                <option value="FR">French (FR)</option>
+                <option value="ES">Spanish (ES)</option>
+                <option value="JA">Japanese (JA)</option>
+                <option value="ZH">Chinese (ZH)</option>
+                <option value="KO">Korean (KO)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Applicant Disambiguation Drawer -->
+          <div id="applicant-variants-panel" class="variants-panel hidden">
+            <div class="variants-header">
+              <span id="variants-summary-text">Matching applicant entities found:</span>
+              <button type="button" id="btn-clear-variants" class="btn-link">Clear filter</button>
+            </div>
+            <div id="variants-checkboxes" class="variants-grid"></div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="input-sample-size">
+                Patents to Assess (1 per Family): <strong id="sample-size-val">30</strong>
+              </label>
+              <input type="range" id="input-sample-size" min="5" max="60" step="5" value="30" />
+              <div class="range-Quick-btns">
+                <button type="button" class="chip-btn" data-count="10">10 (Quick)</button>
+                <button type="button" class="chip-btn" data-count="25">25</button>
+                <button type="button" class="chip-btn active" data-count="30">30 (Standard)</button>
+                <button type="button" class="chip-btn" data-count="50">50 (Deep)</button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="select-data-source">Patent Data Source</label>
+              <select id="select-data-source">
+                <option value="auto" selected>Google Patents Live (Smart Cache &bull; 1 per Family)</option>
+                <option value="demo">Instant Offline Demo Portfolio (3 sec)</option>
+                <option value="epo_ops">EPO OPS v3.2 (Optional &mdash; Requires API Keys)</option>
+              </select>
+              <div id="demo-profile-wrap" class="hidden" style="margin-top:8px;">
+                <select id="select-demo-profile">
+                  <option value="pharma" selected>Demo Sector: Pharma / Chemistry (includes NMR &amp; Assay Tables)</option>
+                  <option value="medtech">Demo Sector: Medical Devices &amp; Robotics</option>
+                  <option value="automotive">Demo Sector: CleanTech &amp; Automotive Systems</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="rte-toggle-banner">
+            <label class="switch">
+              <input type="checkbox" id="check-include-rte" />
+              <span class="slider"></span>
+            </label>
+            <div>
+              <div class="rte-title">Flag Removable RTE (Table Whole Numbers &amp; NMR Data Only)</div>
+              <div class="rte-desc">
+                Flags standalone whole numbers inside tables and <sup>1</sup>H/<sup>13</sup>C/<sup>19</sup>F/<sup>31</sup>P NMR spectroscopic blocks as removable RTE. You can also toggle this ON/OFF live on the results screen and in the PDF report.
+              </div>
+            </div>
+          </div>
+
+          <div class="form-footer">
+            <button type="submit" id="btn-submit-job" class="btn btn-primary btn-lg">
+              Run Rolling TM Simulation
+            </button>
+          </div>
+        </form>
+
+        <!-- Tab B: File Upload -->
+        <form id="form-upload-job" class="card form-card hidden">
+          <div class="form-group">
+            <label for="upload-client-name">Client Name (for Assessment &amp; PDF Report Header)</label>
+            <input type="text" id="upload-client-name" placeholder="e.g., Acme Pharma Ltd." required />
+          </div>
+          <div class="form-group">
+            <label for="upload-files-input">Select Patent Archive (.zip) or Files (.docx, .xml, .html, .txt)</label>
+            <input type="file" id="upload-files-input" multiple accept=".zip,.docx,.xml,.html,.htm,.txt,.csv" required />
+            <span class="field-hint">Supports .zip archives (including optional <code>index.csv</code> dates/URLs) or individual files, sorted chronologically oldest &rarr; newest.</span>
+          </div>
+          <div class="rte-toggle-banner">
+            <label class="switch">
+              <input type="checkbox" id="upload-include-rte" />
+              <span class="slider"></span>
+            </label>
+            <div>
+              <div class="rte-title">Flag Removable RTE (Table Whole Numbers &amp; NMR Data Only)</div>
+              <div class="rte-desc">Flags integer cells in tables and NMR data spans.</div>
+            </div>
+          </div>
+          <div class="form-footer">
+            <button type="submit" class="btn btn-primary btn-lg">Upload &amp; Analyze Batch</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- VIEW 2: Active / Completed Job Dashboard -->
+      <section id="view-results" class="view-section hidden">
+        <!-- Top Header Bar -->
+        <div class="results-header">
+          <div>
+            <div class="eyebrow" id="res-meta-line">EPO OPS &bull; EN &bull; 30 Patents</div>
+            <h1><span id="res-client-title">Client Assessment</span><span class="rws-dot">.</span></h1>
+          </div>
+          <div class="results-actions">
+            <div class="inline-rte-pill" title="Toggle Removable RTE (Whole numbers in tables + NMR data only)">
+              <label class="switch switch-sm">
+                <input type="checkbox" id="res-rte-toggle" />
+                <span class="slider"></span>
+              </label>
+              <span>Include RTE</span>
+            </div>
+            <a id="btn-download-report" href="#" class="btn btn-pink">
+              &#11015; Download PDF Report
+            </a>
+            <button id="btn-delete-job" class="btn btn-danger-outline" title="Delete this assessment">Delete</button>
+          </div>
+        </div>
+
+        <!-- Live Progress Banner (RWS 'Idea loading...' capsule motif) -->
+        <div id="progress-banner" class="card progress-card hidden">
+          <div class="progress-top">
+            <div class="spinner"></div>
+            <div class="progress-text-wrap">
+              <div id="progress-stage-title" class="progress-title">Analysis loading...</div>
+              <div id="progress-detail-msg" class="progress-sub">Initializing...</div>
+            </div>
+            <div id="progress-pct-label" class="progress-pct">0%</div>
+          </div>
+          <div class="progress-bar-track">
+            <div id="progress-bar-fill" class="progress-bar-fill" style="width: 4%"></div>
+          </div>
+        </div>
+
+        <!-- Error Banner -->
+        <div id="error-banner" class="card error-card hidden"></div>
+
+        <!-- KPI Summary Cards -->
+        <div class="kpi-grid">
+          <div class="card kpi-card highlight-galaxy">
+            <div class="kpi-step">01 &bull; HEADLINE DISCOUNT</div>
+            <div class="kpi-label">Projected Cumulative TM Saving</div>
+            <div class="kpi-value"><span id="kpi-cum-tm-saving">0.00%</span></div>
+            <div class="kpi-foot" id="kpi-cum-tm-sub">Weighted savings across full batch</div>
+            <div class="kpi-bg-bubble" aria-hidden="true"></div>
+          </div>
+
+          <div class="card kpi-card">
+            <div class="kpi-step">02 &bull; MATURE RUN-RATE</div>
+            <div class="kpi-label">Mature TM Saving (2nd Half Avg)</div>
+            <div class="kpi-value" id="kpi-mature-saving">0.00%</div>
+            <div class="kpi-foot" id="kpi-ramp-sub">Patent #1 &rarr; #N progression</div>
+          </div>
+
+          <div class="card kpi-card" id="kpi-rte-card">
+            <div class="kpi-step">03 &bull; REMOVABLE ELEMENTS</div>
+            <div class="kpi-label">Projected Cumulative RTE Saving</div>
+            <div class="kpi-value" id="kpi-rte-saving">0.00%</div>
+            <div class="kpi-foot" id="kpi-rte-sub">Table whole numbers &amp; NMR data</div>
+          </div>
+
+          <div class="card kpi-card">
+            <div class="kpi-step">04 &bull; PORTFOLIO VOLUME</div>
+            <div class="kpi-label">Assessed Volume &amp; TM Growth</div>
+            <div class="kpi-value" id="kpi-total-words">0</div>
+            <div class="kpi-foot" id="kpi-words-sub">Studio words &bull; 0 segments in TM</div>
+          </div>
+        </div>
+
+        <!-- Interactive Charts Row -->
+        <div class="charts-grid">
+          <div class="card chart-card">
+            <div class="card-header">
+              <div>
+                <h3>TM Development &amp; Savings Growth Curve<span class="rws-dot">.</span></h3>
+                <p class="chart-sub">Chronological progression (Patent 1 = Blank TM &rarr; Latest Patent)</p>
+              </div>
+            </div>
+            <div class="chart-container">
+              <canvas id="chart-growth-curve"></canvas>
+            </div>
+          </div>
+
+          <div class="card chart-card">
+            <div class="card-header">
+              <div>
+                <h3>Match-Band Leverage Evolution<span class="rws-dot">.</span></h3>
+                <p class="chart-sub">Share of words in each Trados Studio 22 match band per patent</p>
+              </div>
+            </div>
+            <div class="chart-container">
+              <canvas id="chart-match-bands"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sequential Patent Analysis Breakdown Table -->
+        <div class="card table-card">
+          <div class="card-header table-header-bar">
+            <div>
+              <h3>Sequential Patent Analysis Breakdown<span class="rws-dot">.</span></h3>
+              <p class="chart-sub">Chronological patent progression &bull; Payable weights: Repetitions (30%), 100% (30%), 95-99% (30%), 85-94% (50%), &lt;85% (100%)</p>
+            </div>
+          </div>
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>File Ref.</th>
+                  <th>Pub Date</th>
+                  <th class="num">Words (Word)</th>
+                  <th class="num">Words (Studio)</th>
+                  <th class="num">Repetitions</th>
+                  <th class="num">100%</th>
+                  <th class="num">95-99%</th>
+                  <th class="num">85-94%</th>
+                  <th class="num">75-84%</th>
+                  <th class="num">50-74%</th>
+                  <th class="num">No Match</th>
+                  <th class="num">TM Words</th>
+                  <th class="num">% TM Saving</th>
+                  <th class="num">Cumul. TM %</th>
+                  <th class="num">Flagged RTE</th>
+                </tr>
+              </thead>
+              <tbody id="results-table-body"></tbody>
+              <tfoot id="results-table-foot"></tfoot>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Settings Modal (Rate Card, Local Cache & Optional Credentials) -->
+  <div id="settings-modal" class="modal-backdrop hidden">
+    <div class="modal-dialog card">
+      <div class="modal-header">
+        <h2>Rate Card, Local Cache &amp; Settings<span class="rws-dot">.</span></h2>
+        <button id="btn-close-settings" class="btn-icon-dark">&times;</button>
+      </div>
+      <form id="form-settings">
+        <h4 style="margin-bottom:8px; color: var(--rws-galaxy);">Payable Match-Band Multipliers (RWS Standard Defaults)</h4>
+        <div class="weights-grid">
+          <div class="form-group">
+            <label>Repetitions</label>
+            <input type="number" step="0.05" min="0" max="1" id="w-rep" value="0.30" />
+          </div>
+          <div class="form-group">
+            <label>100% Match</label>
+            <input type="number" step="0.05" min="0" max="1" id="w-100" value="0.30" />
+          </div>
+          <div class="form-group">
+            <label>95%-99%</label>
+            <input type="number" step="0.05" min="0" max="1" id="w-95" value="0.30" />
+          </div>
+          <div class="form-group">
+            <label>85%-94%</label>
+            <input type="number" step="0.05" min="0" max="1" id="w-85" value="0.50" />
+          </div>
+        </div>
+
+        <hr class="divider" />
+        <h4 style="margin-bottom:6px; color: var(--rws-galaxy);">Local Patent Full-Text Cache (Google Patents Booster)</h4>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:6px;">
+          <span id="cache-stats-label" style="font-size:0.86rem; color:#4A475C;">0 full-text patents cached locally</span>
+          <button type="button" id="btn-clear-cache" class="btn btn-secondary" style="padding:6px 12px; font-size:0.82rem;">Clear Cache</button>
+        </div>
+        <span class="field-hint">Fetched patents are cached locally for 45 days so repeat client runs, larger sample sizes, and rate-card tests execute instantaneously without re-downloading.</span>
+
+        <hr class="divider" />
+        <h4 style="margin-bottom:6px; color: var(--rws-galaxy);">Optional EPO OPS API Credentials</h4>
+        <p class="field-hint" style="margin-bottom:10px;">
+          Not required &mdash; Google Patents Live works out of the box with zero API keys. Populate only if dedicated EPO OPS v3.2 credentials become available later.
+        </p>
+        <div class="form-group">
+          <label for="set-epo-key">EPO OPS Consumer Key (Optional)</label>
+          <input type="text" id="set-epo-key" placeholder="Leave blank to use Google Patents Live" />
+        </div>
+        <div class="form-group">
+          <label for="set-epo-secret">EPO OPS Consumer Secret (Optional)</label>
+          <input type="password" id="set-epo-secret" placeholder="Leave blank to use Google Patents Live" />
+          <span class="field-hint" id="set-secret-hint"></span>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" id="btn-cancel-settings" class="btn btn-secondary">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Settings</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
