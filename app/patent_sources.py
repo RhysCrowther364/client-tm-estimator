@@ -142,15 +142,44 @@ def _extract_bs4_section_with_tables(section_el) -> tuple[str, list[str]]:
 # ==============================================================================
 
 class EPOOPSClient:
-    """Official EPO OPS v3.2 REST client with OAuth2 client-credentials authentication."""
+    """Official EPO OPS v3.2 REST client with OAuth2 client-credentials authentication,
+    1-per-INPADOC-family deduplication, local SQLite full-text caching, and hybrid full-text fallback."""
 
     AUTH_URL = "https://ops.epo.org/3.2/auth/accesstoken"
     BASE_URL = "https://ops.epo.org/3.2/rest-services"
+
+    _EPO_OFFICE_CQL = {
+        "EN": "(pn=EP OR pn=WO OR pn=US OR pn=GB OR pn=CA OR pn=AU)",
+        "DE": "(pn=DE OR pn=EP OR pn=WO OR pn=AT OR pn=CH)",
+        "FR": "(pn=FR OR pn=EP OR pn=WO OR pn=CA OR pn=CH OR pn=BE)",
+        "ES": "(pn=ES OR pn=WO OR pn=EP)",
+        "JA": "(pn=JP OR pn=WO)",
+        "ZH": "(pn=CN OR pn=WO)",
+        "KO": "(pn=KR OR pn=WO)",
+    }
 
     def __init__(self, consumer_key: str, consumer_secret: str) -> None:
         self.consumer_key = consumer_key.strip()
         self.consumer_secret = consumer_secret.strip()
         self._token: Optional[str] = None
+
+    @staticmethod
+    def _clean_epo_applicant_name(raw: str) -> str:
+        """Normalize EPO applicant names (strip trailing '[SE]' country suffixes and extra whitespace)."""
+        cleaned = re.sub(r"[\u2000-\u200b\s]+", " ", raw or "").strip()
+        cleaned = re.sub(r"\s*\[[A-Z]{2}\]\s*$", "", cleaned).strip(" ,;")
+        return cleaned
+
+    @staticmethod
+    def _sanitize_cql_term(term: str) -> str:
+        cleaned = EPOOPSClient._clean_epo_applicant_name((term or "").replace('"', " "))
+        return cleaned.strip()
+
+    async def test_connection(self) -> dict:
+        """Verify EPO OPS v3.2 Consumer Key & Secret via OAuth2 token endpoint."""
+        async with httpx.AsyncClient() as client:
+            token = await self._authenticate(client)
+            return {"ok": bool(token), "provider": "EPO OPS v3.2"}
 
     async def _authenticate(self, client: httpx.AsyncClient) -> str:
         if self._token:
@@ -176,8 +205,10 @@ class EPOOPSClient:
             token = await self._authenticate(client)
             headers["Authorization"] = f"Bearer {token}"
             resp = await client.get(f"{self.BASE_URL}{path}", params=params, headers=headers, timeout=25.0)
-        if resp.status_code == 404:
-            return None
+        if resp.status_code in (404, 400):
+            # Note: EPO OPS returns HTTP 404 when a CQL search matches 0 publications or fulltext is absent
+            if resp.status_code == 404 or "SERVER.EntityNotFound" in resp.text:
+                return None
         if resp.status_code >= 400:
             raise RuntimeError(f"EPO OPS request {path} failed (HTTP {resp.status_code}): {resp.text[:200]}")
         return ET.fromstring(resp.text)
@@ -186,16 +217,26 @@ class EPOOPSClient:
     def _local_name(tag: str) -> str:
         return tag.rsplit("}", 1)[-1] if "}" in tag else tag
 
-    async def search_applicants(self, query: str) -> ApplicantSearchResponse:
-        cql = f'pa="{query}"'
+    async def search_applicants(self, query: str, language: str = "EN") -> ApplicantSearchResponse:
+        clean_q = self._sanitize_cql_term(query)
+        stripped_q = self._sanitize_cql_term(_strip_legal_suffix(clean_q))
+        office_cql = self._EPO_OFFICE_CQL.get(language.upper(), self._EPO_OFFICE_CQL["EN"])
+
         async with httpx.AsyncClient() as client:
             root = await self._get_xml(
                 client,
                 "/published-data/search/biblio",
-                params={"q": cql, "Range": "1-50"},
+                params={"q": f'pa all "{clean_q}" AND {office_cql}', "Range": "1-60"},
             )
+            if root is None and stripped_q and stripped_q.lower() != clean_q.lower():
+                root = await self._get_xml(
+                    client,
+                    "/published-data/search/biblio",
+                    params={"q": f'pa all "{stripped_q}" AND {office_cql}', "Range": "1-60"},
+                )
+
         if root is None:
-            return ApplicantSearchResponse(query=query, source_used="epo_ops", total_found=0, variants=[])
+            return ApplicantSearchResponse(query=query, source_used="EPO OPS v3.2", total_found=0, variants=[])
 
         total_found = 0
         for el in root.iter():
@@ -203,13 +244,27 @@ class EPOOPSClient:
                 total_found = int(el.attrib.get("total-result-count", "0") or 0)
                 break
 
-        q_low = query.lower()
+        base_tokens = [t.lower() for t in re.split(r"\W+", stripped_q or clean_q) if len(t) >= 2]
+        is_cjk_lang = language.upper() in ("KO", "JA", "ZH")
         counts: Counter[str] = Counter()
-        for el in root.iter():
-            if self._local_name(el.tag) == "applicant-name":
-                name_txt = "".join(el.itertext()).strip()
-                if name_txt and any(tok in name_txt.lower() for tok in q_low.split()[:2]):
-                    counts[name_txt] += 1
+
+        for exch in root.iter():
+            if self._local_name(exch.tag) != "exchange-document":
+                continue
+            # Deduplicate epodoc/original applicant tags within the same exchange-document
+            doc_names: set[str] = set()
+            for el in exch.iter():
+                if self._local_name(el.tag) == "applicant-name":
+                    name_txt = self._clean_epo_applicant_name("".join(el.itertext()))
+                    if not name_txt:
+                        continue
+                    has_non_ascii = any(ord(ch) > 127 for ch in name_txt)
+                    if is_cjk_lang and has_non_ascii:
+                        doc_names.add(name_txt)
+                    elif not base_tokens or any(tok in name_txt.lower() for tok in base_tokens):
+                        doc_names.add(name_txt)
+            for dn in doc_names:
+                counts[dn] += 1
 
         variants = [ApplicantVariant(name=k, hit_count=v) for k, v in counts.most_common(12)]
         return ApplicantSearchResponse(
@@ -227,30 +282,39 @@ class EPOOPSClient:
         language: str = "EN",
         on_progress: Optional[Callable[[int, int, str], None]] = None,
     ) -> list[PatentDocument]:
-        names = applicant_variants if applicant_variants else [client_name]
-        or_clauses = " OR ".join(f'pa all "{n}"' for n in names[:5])
-        lang_up = language.upper()
-        if lang_up == "KO":
-            base_cql = f"({or_clauses}) AND (pn=KR OR pn=WO)"
-        elif lang_up == "JA":
-            base_cql = f"({or_clauses}) AND (pn=JP OR pn=WO)"
-        elif lang_up == "ZH":
-            base_cql = f"({or_clauses}) AND (pn=CN OR pn=WO)"
-        else:
-            base_cql = f"({or_clauses}) AND (pn=EP OR pn=WO OR pn=US OR pn=GB)"
+        import datetime as dt
+        from app.patent_cache import get_cached_patent, put_cached_patent
 
-        candidates: list[dict] = []
-        seen_families: set[str] = set()
+        lang_up = language.upper()
         lang_low = language.lower()
 
-        async with httpx.AsyncClient() as client:
-            # Query recent publication window first so large filers return newest families, widening if client has fewer filings
-            current_year = 2026
+        # Support direct patent publication number lists via EPO OPS + Hybrid Fallback too
+        direct_pubs = _parse_direct_pub_numbers(client_name)
+        if direct_pubs:
+            or_pubs = " OR ".join(f"pn={p}" for p in direct_pubs[:50])
+            cql_tiers = [or_pubs]
+        else:
+            raw_names = applicant_variants if applicant_variants else [client_name]
+            clean_names = [self._sanitize_cql_term(n) for n in raw_names if self._sanitize_cql_term(n)]
+            if not applicant_variants:
+                stripped = self._sanitize_cql_term(_strip_legal_suffix(client_name))
+                if stripped and all(stripped.lower() != n.lower() for n in clean_names):
+                    clean_names.append(stripped)
+
+            or_clauses = " OR ".join(f'pa all "{n}"' for n in clean_names[:5])
+            office_cql = self._EPO_OFFICE_CQL.get(lang_up, self._EPO_OFFICE_CQL["EN"])
+            base_cql = f"({or_clauses}) AND {office_cql}"
+            current_year = dt.date.today().year
             cql_tiers = [
                 f"{base_cql} AND pd>={current_year - 2}",
                 f"{base_cql} AND pd>={current_year - 6}",
                 base_cql,
             ]
+
+        candidates: list[dict] = []
+        seen_families: set[str] = set()
+
+        async with httpx.AsyncClient() as client:
             for tier_idx, cql in enumerate(cql_tiers):
                 for start in range(1, 201, 50):
                     end = start + 49
@@ -306,7 +370,7 @@ class EPOOPSClient:
                                 if txt and (a_lang == lang_low or not abstract_txt):
                                     abstract_txt = txt
                             elif lname == "applicant-name" and not app_name:
-                                app_name = "".join(sub.itertext()).strip()
+                                app_name = self._clean_epo_applicant_name("".join(sub.itertext()))
 
                         seen_families.add(fam_id)
                         candidates.append({
@@ -331,34 +395,54 @@ class EPOOPSClient:
             selected = candidates[:sample_size]
 
             gp_fallback = GooglePatentsClient()
+            gp_http: Optional[httpx.AsyncClient] = None
             results: list[PatentDocument] = []
             total = len(selected)
 
-            for idx, item in enumerate(selected, start=1):
-                pub = item["pub_number"]
-                if on_progress:
-                    on_progress(idx, total, f"Downloading {pub} ({idx}/{total}) via EPO OPS...")
+            try:
+                for idx, item in enumerate(selected, start=1):
+                    pub = item["pub_number"]
 
-                desc_txt, claims_txt, table_cells = await self._fetch_fulltext(
-                    client, item["epodoc"], lang_low
-                )
-
-                # Hybrid fallback: if EPO OPS lacks fulltext XML for a non-EP office (e.g. certain US/WO records), fetch from Google Patents
-                if not desc_txt and not claims_txt:
-                    gp_doc = await gp_fallback.fetch_single_patent_html(
-                        client,
-                        pub_number=pub,
-                        family_id=item["family_id"],
-                        pub_date=item["pub_date"],
-                        applicant=item["applicant"],
-                        language=language,
-                    )
-                    if gp_doc and (gp_doc.description_text or gp_doc.claims_text):
-                        results.append(gp_doc)
+                    # 1) Check 45-day local SQLite full-text cache first (saves EPO OPS quota & time)
+                    cached_doc = get_cached_patent(pub, language)
+                    if cached_doc is not None and (cached_doc.description_text or cached_doc.claims_text):
+                        if on_progress:
+                            on_progress(idx, total, f"Loaded {pub} from local cache ({idx}/{total})...")
+                        results.append(cached_doc)
                         continue
 
-                results.append(
-                    PatentDocument(
+                    if on_progress:
+                        on_progress(idx, total, f"Downloading {pub} ({idx}/{total}) via EPO OPS v3.2...")
+
+                    desc_txt, claims_txt, table_cells = await self._fetch_fulltext(
+                        client, item["epodoc"], lang_low
+                    )
+
+                    # 2) Hybrid fallback: if EPO OPS lacks fulltext XML in requested language (e.g. certain US/KR/JP/WO records), fetch fulltext from Google Patents
+                    if not desc_txt and not claims_txt:
+                        if gp_http is None:
+                            gp_http = httpx.AsyncClient(
+                                headers=GooglePatentsClient.HEADERS, follow_redirects=True, timeout=25.0
+                            )
+                        try:
+                            gp_doc = await gp_fallback.fetch_single_patent_html(
+                                gp_http,
+                                pub_number=pub,
+                                family_id=item["family_id"],
+                                pub_date=item["pub_date"],
+                                applicant=item["applicant"],
+                                language=language,
+                                fallback_title=item["title"],
+                            )
+                        except Exception:
+                            gp_doc = None
+                        if gp_doc and (gp_doc.description_text or gp_doc.claims_text):
+                            put_cached_patent(gp_doc)
+                            results.append(gp_doc)
+                            await asyncio.sleep(0.25)
+                            continue
+
+                    built_doc = PatentDocument(
                         pub_number=pub,
                         family_id=item["family_id"],
                         pub_date=item["pub_date"],
@@ -371,8 +455,13 @@ class EPOOPSClient:
                         table_cells=table_cells,
                         source_url=f"https://worldwide.espacenet.com/patent/search?q=pn%3D{pub}",
                     )
-                )
-                await asyncio.sleep(0.15)  # Polite OPS rate pacing
+                    if desc_txt or claims_txt:
+                        put_cached_patent(built_doc)
+                    results.append(built_doc)
+                    await asyncio.sleep(0.15)  # Polite OPS rate pacing
+            finally:
+                if gp_http is not None:
+                    await gp_http.aclose()
 
         return results
 

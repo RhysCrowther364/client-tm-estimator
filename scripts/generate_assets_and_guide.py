@@ -385,42 +385,43 @@ def generate_word_user_guide(icon_png: Path) -> Path:
     # -------------------------------------------------------------------------
     # 02 Getting Started
     # -------------------------------------------------------------------------
-    _add_rws_heading(doc, "02", "Launching the Desktop Application")
+    _add_rws_heading(doc, "02", "Launching & One-Time EPO OPS Key Setup")
     _add_bullet(
         doc,
         "1. Double-click RWS_Patent_TM_Estimator.exe: ",
-        "No Python installation, API keys, or local Trados Studio license are required on your laptop. The application "
-        "opens directly in its own dedicated RWS desktop window with Google Patents Live ready out of the box.",
+        "No Python installation or local Trados Studio license is required on your laptop. The application "
+        "opens directly in its own dedicated RWS desktop window.",
     )
     _add_bullet(
         doc,
-        "2. Automatic Local Patent Cache: ",
-        "Every full-text patent fetched from Google Patents is automatically saved in a local 45-day SQLite cache on "
-        "your PC. Re-running a client, expanding from 25 to 50 patents, or testing custom payable weights in Settings (⚙) "
-        "reuses cached specifications instantaneously with zero redundant downloads.",
+        "2. Enter Your EPO OPS Consumer Key & Secret (One-Time Setup): ",
+        "Click the gear icon (⚙) in the left Galaxy Purple sidebar, paste your team's EPO Open Patent Services "
+        "(OPS v3.2) Consumer Key and Consumer Secret, click 'Test EPO Connection' to verify OAuth2 access, and "
+        "click 'Save Settings'. Your keys are saved locally and persist across sessions.",
     )
     _add_bullet(
         doc,
-        "3. Closing the App: ",
-        "Simply close the application window when finished. All completed client assessments and cached patents remain "
-        "saved locally for future sessions.",
+        "3. Automatic 45-Day Local Patent Cache: ",
+        "Fetched full-text specifications are cached locally on your PC for 45 days to conserve EPO OPS quota "
+        "and make repeat client runs, larger samples, and custom rate-card checks instantaneous.",
     )
 
     # -------------------------------------------------------------------------
     # 03 Running an Assessment
     # -------------------------------------------------------------------------
     _add_rws_heading(doc, "03", "Running a Client Assessment")
-    p_opt = doc.add_paragraph("You can assess a client portfolio using live Google Patents retrieval, explicit patent numbers, or pre-downloaded files:")
+    p_opt = doc.add_paragraph("You can assess a client portfolio using live EPO OPS v3.2 retrieval (with hybrid full-text fallback), explicit patent numbers, or uploaded files:")
     p_opt.paragraph_format.space_after = Pt(6)
 
     _add_bullet(
         doc,
-        "Option A — Search Patent Database (Google Patents Live): ",
+        "Option A — Search Patent Database (EPO OPS v3.2 + Smart Cache): ",
         "Enter the Client / Applicant Name (e.g., AstraZeneca, Procter & Gamble, Siemens) and select the Source Language "
-        "(EN, DE, FR, ES, JA, ZH, or KO). Legal suffixes (PLC, AG, Inc., GmbH, 주식회사) are handled automatically. Click "
-        "'Verify Entities' to preview matching legal entity names and tick the subsidiaries you want included. You can "
-        "also paste explicit publication numbers directly into the box (e.g., WO2025110491A1, EP4200317A1). Choose the "
-        "sample size (typically 25–50; strictly 1 publication per patent family is selected) and click 'Run Rolling TM Simulation'.",
+        "(EN, DE, FR, ES, JA, ZH, or KO). Click 'Verify Entities' to preview matching INPADOC legal entity names and "
+        "tick the subsidiaries you want included (or paste explicit publication numbers like EP4200317A1, WO2025110491A1). "
+        "Choose the sample size (typically 25–50; strictly 1 publication per INPADOC patent family is selected) and click "
+        "'Run Rolling TM Simulation'. For non-EP offices lacking OPS full-text XML, the engine automatically retrieves "
+        "full-text & tables via Google Patents.",
     )
     _add_bullet(
         doc,

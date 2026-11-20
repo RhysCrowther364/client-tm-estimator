@@ -34,8 +34,8 @@
 
         <div class="api-status-box" id="api-status-box">
           <span class="status-dot" id="epo-status-dot"></span>
-          <span id="epo-status-label">Google Patents Live Ready</span>
-          <button id="btn-open-settings" class="btn-icon" title="Configure Rate Card, Local Cache &amp; Settings">&#9881;</button>
+          <span id="epo-status-label">Checking patent feed...</span>
+          <button id="btn-open-settings" class="btn-icon" title="Configure EPO OPS API Keys, Rate Card &amp; Cache">&#9881;</button>
         </div>
 
         <div class="history-header">Recent Assessments</div>
@@ -153,9 +153,10 @@
             <div class="form-group">
               <label for="select-data-source">Patent Data Source</label>
               <select id="select-data-source">
-                <option value="auto" selected>Google Patents Live (Smart Cache &bull; 1 per Family)</option>
+                <option value="auto" selected>Auto (EPO OPS v3.2 + Smart Cache &rarr; Google Patents)</option>
+                <option value="epo_ops">EPO Open Patent Services (OPS v3.2 Strict)</option>
+                <option value="google_patents">Google Patents Live (Smart Cache &bull; No Key Needed)</option>
                 <option value="demo">Instant Offline Demo Portfolio (3 sec)</option>
-                <option value="epo_ops">EPO OPS v3.2 (Optional &mdash; Requires API Keys)</option>
               </select>
               <div id="demo-profile-wrap" class="hidden" style="margin-top:8px;">
                 <select id="select-demo-profile">
@@ -353,14 +354,34 @@
     </main>
   </div>
 
-  <!-- Settings Modal (Rate Card, Local Cache & Optional Credentials) -->
+  <!-- Settings Modal (EPO OPS Credentials, Rate Card & Local Cache) -->
   <div id="settings-modal" class="modal-backdrop hidden">
     <div class="modal-dialog card">
       <div class="modal-header">
-        <h2>Rate Card, Local Cache &amp; Settings<span class="rws-dot">.</span></h2>
+        <h2>EPO OPS API, Rate Card &amp; Cache<span class="rws-dot">.</span></h2>
         <button id="btn-close-settings" class="btn-icon-dark">&times;</button>
       </div>
       <form id="form-settings">
+        <p class="subtitle" style="margin-bottom:12px;">
+          Enter your EPO Open Patent Services (OPS v3.2) credentials. Once saved, EPO OPS v3.2 is used automatically as your primary patent source (with 45-day local caching &amp; hybrid full-text fallback).
+        </p>
+        <div class="form-group">
+          <label for="set-epo-key">EPO OPS Consumer Key</label>
+          <input type="text" id="set-epo-key" placeholder="Paste Consumer Key from developers.epo.org" />
+        </div>
+        <div class="form-group">
+          <label for="set-epo-secret">EPO OPS Consumer Secret</label>
+          <input type="password" id="set-epo-secret" placeholder="Paste Consumer Secret (or leave blank to keep saved)" />
+          <span class="field-hint" id="set-secret-hint"></span>
+        </div>
+        <div style="display:flex; align-items:center; gap:12px; margin-top:4px; margin-bottom:4px;">
+          <button type="button" id="btn-test-epo" class="btn btn-secondary" style="padding:6px 14px; font-size:0.83rem;">
+            Test EPO Connection
+          </button>
+          <span id="epo-test-status" style="font-size:0.83rem; font-weight:600;"></span>
+        </div>
+
+        <hr class="divider" />
         <h4 style="margin-bottom:8px; color: var(--rws-galaxy);">Payable Match-Band Multipliers (RWS Standard Defaults)</h4>
         <div class="weights-grid">
           <div class="form-group">
@@ -382,27 +403,12 @@
         </div>
 
         <hr class="divider" />
-        <h4 style="margin-bottom:6px; color: var(--rws-galaxy);">Local Patent Full-Text Cache (Google Patents Booster)</h4>
+        <h4 style="margin-bottom:6px; color: var(--rws-galaxy);">Local Patent Full-Text Cache (Quota &amp; Speed Booster)</h4>
         <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:6px;">
           <span id="cache-stats-label" style="font-size:0.86rem; color:#4A475C;">0 full-text patents cached locally</span>
           <button type="button" id="btn-clear-cache" class="btn btn-secondary" style="padding:6px 12px; font-size:0.82rem;">Clear Cache</button>
         </div>
-        <span class="field-hint">Fetched patents are cached locally for 45 days so repeat client runs, larger sample sizes, and rate-card tests execute instantaneously without re-downloading.</span>
-
-        <hr class="divider" />
-        <h4 style="margin-bottom:6px; color: var(--rws-galaxy);">Optional EPO OPS API Credentials</h4>
-        <p class="field-hint" style="margin-bottom:10px;">
-          Not required &mdash; Google Patents Live works out of the box with zero API keys. Populate only if dedicated EPO OPS v3.2 credentials become available later.
-        </p>
-        <div class="form-group">
-          <label for="set-epo-key">EPO OPS Consumer Key (Optional)</label>
-          <input type="text" id="set-epo-key" placeholder="Leave blank to use Google Patents Live" />
-        </div>
-        <div class="form-group">
-          <label for="set-epo-secret">EPO OPS Consumer Secret (Optional)</label>
-          <input type="password" id="set-epo-secret" placeholder="Leave blank to use Google Patents Live" />
-          <span class="field-hint" id="set-secret-hint"></span>
-        </div>
+        <span class="field-hint">Fetched EPO OPS &amp; Google Patents specifications are cached locally for 45 days to conserve EPO API quota and make repeat runs instantaneous.</span>
 
         <div class="modal-footer">
           <button type="button" id="btn-cancel-settings" class="btn btn-secondary">Cancel</button>

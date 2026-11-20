@@ -34,11 +34,11 @@ Outputs are generated in `release/`:
 
 ## Key Capabilities
 
-1. **Google Patents Live Engine + 45-Day Local Smart Cache**
-   - Works out of the box with **zero API keys**.
-   - Single-call family-grouped search (`1 publication per patent family` so `A1`/`B1` duplicates never inflate 100% matches), polite rate-paced full-text & HTML `<table>` extraction, automatic legal-suffix handling (`PLC`, `AG`, `GmbH`, `Inc.`, `주식회사`), multi-entity selection via **Verify Entities**, and direct publication-number list pasting.
-   - Persistent local SQLite cache (`data/patent_cache.db`) stores fetched specifications for 45 days so repeat runs and rate-card tests execute in `< 0.1s` with zero redundant downloads.
-   - Also supports **Direct File Upload** (`.zip`, `.docx`, `.xml`, `.html`, `.txt`), **Instant Offline Demo Portfolios**, and optional **EPO OPS v3.2** credentials.
+1. **EPO OPS v3.2 Primary Engine + Hybrid Google Patents + 45-Day Smart Cache**
+   - **EPO Open Patent Services (OPS v3.2)**: Click the **&#9881; Settings** icon in the sidebar (or configure `.env`) to enter your `EPO OPS Consumer Key` and `Consumer Secret`, and click **Test EPO Connection** to verify OAuth2 access. Performs CQL applicant search with strict **1-per-INPADOC-family** deduplication, XML full-text + `<tables>` extraction, and automatic **Hybrid Google Patents full-text fallback** for non-EP publications lacking OPS full-text XML.
+   - **Google Patents Live Engine**: Also works standalone with zero API keys (single-call family-grouped search + polite rate-paced waves), and serves as an automatic backup if EPO OPS quota is ever reached.
+   - **45-Day Local SQLite Cache (`data/patent_cache.db`)**: Stores fetched specifications locally to conserve EPO OPS weekly quota and make repeat client runs execute in `< 0.1s`.
+   - Also supports **Direct Patent Number Pasting** (`EP4200317A1, WO2025110491A1`), **Direct File Upload** (`.zip`, `.docx`, `.xml`, `.html`, `.txt`), and **Instant Offline Demo Portfolios**.
 
 2. **Sequential Rolling TM Engine (Trados Studio 2022 Match Bands)**
    - Sorts patents **chronologically (`oldest -> newest`)** starting from a Blank TM on Patent #1.

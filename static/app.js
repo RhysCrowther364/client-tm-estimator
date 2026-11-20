@@ -40,13 +40,12 @@
       const dot = $("epo-status-dot");
       const lbl = $("epo-status-label");
       const cachedCount = Number(data.cached_patents || 0);
-      dot.classList.remove("fallback");
       if (data.has_epo_credentials) {
-        lbl.textContent = "EPO OPS + Google Ready";
-      } else if (cachedCount > 0) {
-        lbl.textContent = `Google Patents • ${fmtInt(cachedCount)} cached`;
+        dot.classList.remove("fallback");
+        lbl.textContent = cachedCount > 0 ? `EPO OPS v3.2 • ${fmtInt(cachedCount)} cached` : "EPO OPS v3.2 Ready";
       } else {
-        lbl.textContent = "Google Patents Live Ready";
+        dot.classList.add("fallback");
+        lbl.textContent = "Add EPO Key in ⚙ (Google Ready)";
       }
       const cacheStatsLbl = $("cache-stats-label");
       if (cacheStatsLbl) {
@@ -56,8 +55,10 @@
       $("set-epo-key").value = data.epo_ops_key || "";
       $("set-epo-secret").value = "";
       $("set-secret-hint").textContent = data.epo_ops_secret_masked
-        ? `Saved secret: ${data.epo_ops_secret_masked}`
-        : "Optional — leave blank to use Google Patents Live.";
+        ? `Saved secret: ${data.epo_ops_secret_masked} (leave blank to keep)`
+        : "No EPO secret saved yet — paste Consumer Secret above.";
+      const testStatusEl = $("epo-test-status");
+      if (testStatusEl) testStatusEl.textContent = "";
       $("w-rep").value = data.weight_repetitions;
       $("w-100").value = data.weight_100;
       $("w-95").value = data.weight_95_99;
@@ -75,6 +76,41 @@
     });
     $("btn-close-settings").addEventListener("click", () => modal.classList.add("hidden"));
     $("btn-cancel-settings").addEventListener("click", () => modal.classList.add("hidden"));
+
+    const testEpoBtn = $("btn-test-epo");
+    if (testEpoBtn) {
+      testEpoBtn.addEventListener("click", async () => {
+        const statusEl = $("epo-test-status");
+        testEpoBtn.disabled = true;
+        testEpoBtn.textContent = "Testing...";
+        statusEl.style.color = "#4A475C";
+        statusEl.textContent = "Verifying OAuth2 credentials with ops.epo.org...";
+        try {
+          const resp = await fetch("/api/settings/test-epo", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              epo_ops_key: $("set-epo-key").value.trim(),
+              epo_ops_secret: $("set-epo-secret").value.trim(),
+            }),
+          });
+          const data = await resp.json();
+          if (resp.ok && data.ok) {
+            statusEl.style.color = "#059669";
+            statusEl.textContent = `✓ ${data.message}`;
+          } else {
+            statusEl.style.color = "#DC2626";
+            statusEl.textContent = `✗ ${data.error || "Authentication failed."}`;
+          }
+        } catch (err) {
+          statusEl.style.color = "#DC2626";
+          statusEl.textContent = `✗ Connection error: ${err}`;
+        } finally {
+          testEpoBtn.disabled = false;
+          testEpoBtn.textContent = "Test EPO Connection";
+        }
+      });
+    }
 
     const clearCacheBtn = $("btn-clear-cache");
     if (clearCacheBtn) {

@@ -61,6 +61,24 @@ async def update_settings_api(request: Request) -> JSONResponse:
     return JSONResponse(out)
 
 
+async def test_epo_connection_api(request: Request) -> JSONResponse:
+    body = await request.json()
+    current = load_settings()
+    key = (body.get("epo_ops_key") or current.epo_ops_key or "").strip()
+    secret = (body.get("epo_ops_secret") or current.epo_ops_secret or "").strip()
+    if not key or not secret:
+        return JSONResponse(
+            {"ok": False, "error": "Please enter both EPO OPS Consumer Key and Consumer Secret."},
+            status_code=400,
+        )
+    try:
+        epo = EPOOPSClient(key, secret)
+        await epo.test_connection()
+        return JSONResponse({"ok": True, "message": "Connected to EPO OPS v3.2 — OAuth2 credentials verified."})
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+
 async def search_applicants_api(request: Request) -> JSONResponse:
     query = (request.query_params.get("q") or "").strip()
     language = (request.query_params.get("language") or "EN").strip().upper()
@@ -72,7 +90,7 @@ async def search_applicants_api(request: Request) -> JSONResponse:
         if settings.epo_ops_key and settings.epo_ops_secret:
             try:
                 epo = EPOOPSClient(settings.epo_ops_key, settings.epo_ops_secret)
-                res = await epo.search_applicants(query)
+                res = await epo.search_applicants(query, language=language)
                 return JSONResponse(res.model_dump())
             except Exception as epo_exc:
                 gp = GooglePatentsClient()
@@ -195,6 +213,7 @@ routes = [
     Route("/", index_page, methods=["GET"]),
     Route("/api/settings", get_settings_api, methods=["GET"]),
     Route("/api/settings", update_settings_api, methods=["PUT"]),
+    Route("/api/settings/test-epo", test_epo_connection_api, methods=["POST"]),
     Route("/api/cache/clear", clear_cache_api, methods=["POST"]),
     Route("/api/applicants/search", search_applicants_api, methods=["GET"]),
     Route("/api/jobs", list_jobs_api, methods=["GET"]),

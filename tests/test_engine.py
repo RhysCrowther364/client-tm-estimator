@@ -185,11 +185,16 @@ class PatentTMEstimatorTests(unittest.TestCase):
             put_cached_patent,
         )
         from app.patent_sources import (
+            EPOOPSClient,
             GooglePatentsClient,
             _extract_gp_family_id,
             _parse_direct_pub_numbers,
             _strip_legal_suffix,
         )
+
+        # 0) EPO OPS applicant country-tag normalization & CQL sanitization
+        self.assertEqual(EPOOPSClient._clean_epo_applicant_name("ASTRAZENECA AB\u2002[SE]"), "ASTRAZENECA AB")
+        self.assertEqual(EPOOPSClient._sanitize_cql_term('Siemens "AG" [DE]'), "Siemens AG")
 
         # 1) URL-encoding of '&' and multi-entity batching in Google Patents XHR query param
         q_param = GooglePatentsClient._build_search_url_param(
