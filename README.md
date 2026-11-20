@@ -36,6 +36,7 @@ Outputs are generated in `release/`:
 
 1. **EPO OPS v3.2 Primary Engine + Hybrid Google Patents + 45-Day Smart Cache**
    - **EPO Open Patent Services (OPS v3.2)**: Click the **&#9881; Settings** icon in the sidebar (or configure `.env`) to enter your `EPO OPS Consumer Key` and `Consumer Secret`, and click **Test EPO Connection** to verify OAuth2 access. Performs CQL applicant search with strict **1-per-INPADOC-family** deduplication, XML full-text + `<tables>` extraction, and automatic **Hybrid Google Patents full-text fallback** for non-EP publications lacking OPS full-text XML.
+   - **Automatic Anomaly Exclusion**: Automatically filters out Industrial Designs / Design Patents (`CA...S`, `USD...S1`, `CN...S`, `KR30...`), Plant Patents (`P` / `USPP...`), search-report/title-page notices (`A3`, `A4`, `A8`, `A9`), and non-full-text stubs (`< 250` words) so only genuine full-text utility specifications enter the TM simulation.
    - **Google Patents Live Engine**: Also works standalone with zero API keys (single-call family-grouped search + polite rate-paced waves), and serves as an automatic backup if EPO OPS quota is ever reached.
    - **45-Day Local SQLite Cache (`data/patent_cache.db`)**: Stores fetched specifications locally to conserve EPO OPS weekly quota and make repeat client runs execute in `< 0.1s`.
    - Also supports **Direct Patent Number Pasting** (`EP4200317A1, WO2025110491A1`), **Direct File Upload** (`.zip`, `.docx`, `.xml`, `.html`, `.txt`), and **Instant Offline Demo Portfolios**.

@@ -20,6 +20,7 @@ import httpx
 
 from app.config import AppSettings
 from app.models import ApplicantSearchResponse, ApplicantVariant, PatentDocument
+from app.segmentation import count_ms_word
 
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
 _MULTI_SPACE_RE = re.compile(r"[ \t]+")
@@ -71,6 +72,73 @@ def _parse_direct_pub_numbers(raw: str) -> list[str]:
                 out.append(t)
         return out
     return []
+
+
+_EXCLUDED_PROCEDURAL_KINDS = {
+    "A3", "A4", "A8", "A9",  # Search reports & corrected front pages (no specification)
+    "B8", "B9", "C8", "C9",  # Corrected title/front pages
+    "D0", "H", "H1", "M",    # Bibliographic / statutory / fee notices
+    "T3", "T4", "T5",        # Translation / modification notices without full specification
+}
+_PUB_SPLIT_RE = re.compile(r"^([A-Z]{2})([A-Z]{0,2}\d+)([A-Z]\d*)?$", re.IGNORECASE)
+
+# Minimum word count for a valid utility patent specification (excludes 3-word design stubs & title-only notices)
+MIN_SPECIFICATION_WORDS = 250
+
+
+def _is_excluded_publication(
+    pub_number: str, country: str = "", doc_number: str = "", kind: str = ""
+) -> bool:
+    """Return True if a publication is a non-utility or non-specification anomaly:
+    - Industrial Designs / Design Patents (kind S/S1..S9, F, USD..., KR30..., JPD..., CA...S, CN...S)
+    - Plant Patents (kind P/P1..P9, USPP...)
+    - Search reports, corrected front pages, or bibliographic notices (A3, A4, A8, A9, B8, B9, T3..T5)
+    """
+    pub_clean = re.sub(r"[\s/-]+", "", (pub_number or "")).upper()
+    cc = (country or "").strip().upper()
+    doc = (doc_number or "").strip().upper()
+    kc = (kind or "").strip().upper()
+
+    if (not cc or not kc) and pub_clean:
+        m = _PUB_SPLIT_RE.match(pub_clean)
+        if m:
+            cc = cc or (m.group(1) or "")
+            doc = doc or (m.group(2) or "")
+            kc = kc or (m.group(3) or "")
+
+    # 1. Design patents & Industrial designs (e.g. CA241656S, USD1045678S1, CN308512345S, JPD1751234S)
+    if kc.startswith("S") or kc.startswith("F"):
+        return True
+    if cc in ("US", "JP", "TW") and doc.startswith("D"):
+        return True
+    if cc == "KR" and (doc.startswith("30") or pub_clean.startswith("KR30")):
+        return True
+    if cc == "CN" and doc.startswith("30") and len(doc) >= 9:
+        return True
+
+    # 2. Plant patents (e.g. USPP035123P2)
+    if kc.startswith("P") or (cc == "US" and doc.startswith("PP")):
+        return True
+
+    # 3. Search-report-only, corrected front-page, or non-specification procedural publications
+    if kc in _EXCLUDED_PROCEDURAL_KINDS:
+        return True
+
+    return False
+
+
+def _is_substantive_patent_doc(doc: Optional[PatentDocument], min_words: int = MIN_SPECIFICATION_WORDS) -> bool:
+    """Ensure a retrieved patent contains a genuine full-text specification/claims (never a 3-word title/design stub)."""
+    if doc is None:
+        return False
+    if _is_excluded_publication(doc.pub_number):
+        return False
+    if not ((doc.description_text or "").strip() or (doc.claims_text or "").strip()):
+        return False
+    combined = "\n".join(
+        p for p in (doc.title, doc.abstract_text, doc.description_text, doc.claims_text) if p
+    )
+    return count_ms_word(combined) >= min_words
 
 
 def _extract_gp_family_id(pat_obj: dict) -> str:
@@ -332,6 +400,7 @@ class EPOOPSClient:
                         break
 
                     docs_in_batch = 0
+                    pool_limit = max(sample_size * 2, sample_size + 25)
                     for exch in root.iter():
                         if self._local_name(exch.tag) != "exchange-document":
                             continue
@@ -341,6 +410,11 @@ class EPOOPSClient:
                         doc_num = exch.attrib.get("doc-number", "")
                         kind = exch.attrib.get("kind", "")
                         pub_ref = f"{country}{doc_num}{kind}"
+
+                        # Exclude design patents (e.g. CA241656S, USD...S1), plant patents, & search-report/title stubs
+                        if _is_excluded_publication(pub_ref, country=country, doc_number=doc_num, kind=kind):
+                            continue
+
                         if not fam_id:
                             fam_id = pub_ref
 
@@ -382,43 +456,49 @@ class EPOOPSClient:
                             "abstract": abstract_txt,
                             "applicant": app_name or client_name,
                         })
-                        if len(candidates) >= sample_size * 2:
+                        if len(candidates) >= pool_limit:
                             break
 
-                    if docs_in_batch < 50 or len(candidates) >= sample_size * 2:
+                    if docs_in_batch < 50 or len(candidates) >= pool_limit:
                         break
-                if len(candidates) >= sample_size:
+                if len(candidates) >= sample_size + 15:
                     break
 
-            # Sort newest first to select the N most recent families
+            # Sort newest first and iterate until sample_size substantive full-text utility patents are gathered
             candidates.sort(key=lambda x: x["pub_date"], reverse=True)
-            selected = candidates[:sample_size]
 
             gp_fallback = GooglePatentsClient()
             gp_http: Optional[httpx.AsyncClient] = None
             results: list[PatentDocument] = []
-            total = len(selected)
+            target_total = min(sample_size, len(candidates))
 
             try:
-                for idx, item in enumerate(selected, start=1):
+                for item in candidates:
+                    if len(results) >= sample_size:
+                        break
                     pub = item["pub_number"]
 
                     # 1) Check 45-day local SQLite full-text cache first (saves EPO OPS quota & time)
                     cached_doc = get_cached_patent(pub, language)
-                    if cached_doc is not None and (cached_doc.description_text or cached_doc.claims_text):
-                        if on_progress:
-                            on_progress(idx, total, f"Loaded {pub} from local cache ({idx}/{total})...")
+                    if _is_substantive_patent_doc(cached_doc):
                         results.append(cached_doc)
+                        if on_progress:
+                            on_progress(
+                                len(results),
+                                target_total,
+                                f"Loaded {pub} from local cache ({len(results)}/{target_total})...",
+                            )
                         continue
 
+                    next_idx = len(results) + 1
                     if on_progress:
-                        on_progress(idx, total, f"Downloading {pub} ({idx}/{total}) via EPO OPS v3.2...")
+                        on_progress(next_idx, target_total, f"Downloading {pub} ({next_idx}/{target_total}) via EPO OPS v3.2...")
 
                     desc_txt, claims_txt, table_cells = await self._fetch_fulltext(
                         client, item["epodoc"], lang_low
                     )
 
-                    # 2) Hybrid fallback: if EPO OPS lacks fulltext XML in requested language (e.g. certain US/KR/JP/WO records), fetch fulltext from Google Patents
+                    # 2) Hybrid fallback: if EPO OPS lacks fulltext XML in requested language, fetch fulltext from Google Patents
                     if not desc_txt and not claims_txt:
                         if gp_http is None:
                             gp_http = httpx.AsyncClient(
@@ -436,7 +516,7 @@ class EPOOPSClient:
                             )
                         except Exception:
                             gp_doc = None
-                        if gp_doc and (gp_doc.description_text or gp_doc.claims_text):
+                        if _is_substantive_patent_doc(gp_doc):
                             put_cached_patent(gp_doc)
                             results.append(gp_doc)
                             await asyncio.sleep(0.25)
@@ -455,8 +535,12 @@ class EPOOPSClient:
                         table_cells=table_cells,
                         source_url=f"https://worldwide.espacenet.com/patent/search?q=pn%3D{pub}",
                     )
-                    if desc_txt or claims_txt:
-                        put_cached_patent(built_doc)
+                    # Skip stub/title-only/design anomalies (<250 words or missing specification) and continue to next family
+                    if not _is_substantive_patent_doc(built_doc):
+                        await asyncio.sleep(0.10)
+                        continue
+
+                    put_cached_patent(built_doc)
                     results.append(built_doc)
                     await asyncio.sleep(0.15)  # Polite OPS rate pacing
             finally:
@@ -706,7 +790,7 @@ class GooglePatentsClient:
                     for item in items:
                         pat = item.get("patent", {})
                         pub_num = (pat.get("publication_number") or "").strip()
-                        if not pub_num or pub_num in seen_pubs:
+                        if not pub_num or pub_num in seen_pubs or _is_excluded_publication(pub_num):
                             continue
 
                         fam_id = _extract_gp_family_id(pat)
@@ -784,7 +868,6 @@ class GooglePatentsClient:
         from app.patent_cache import get_cached_patent, put_cached_patent
 
         fetched_docs: list[PatentDocument] = []
-        abstract_only_backups: list[PatentDocument] = []
         seen_family_ids: set[str] = set()
         rate_limited = False
         client: Optional[httpx.AsyncClient] = None
@@ -796,13 +879,17 @@ class GooglePatentsClient:
             while idx < total_cands and len(fetched_docs) < target_count and not rate_limited:
                 # 1) Drain any immediately consecutive cached candidates at zero network cost
                 cand = candidates[idx]
+                if _is_excluded_publication(cand["pub_number"]):
+                    idx += 1
+                    continue
+
                 cached_doc = get_cached_patent(cand["pub_number"], language)
                 if cached_doc is not None:
                     idx += 1
                     fid = cached_doc.family_id or cand.get("family_id") or cached_doc.pub_number
                     if fid in seen_family_ids:
                         continue
-                    if cached_doc.description_text or cached_doc.claims_text:
+                    if _is_substantive_patent_doc(cached_doc):
                         seen_family_ids.add(fid)
                         fetched_docs.append(cached_doc)
                         if on_progress:
@@ -811,8 +898,6 @@ class GooglePatentsClient:
                                 target_count,
                                 f"Loaded {cached_doc.pub_number} from local cache ({len(fetched_docs)}/{target_count})...",
                             )
-                    elif cached_doc.abstract_text:
-                        abstract_only_backups.append(cached_doc)
                     continue
 
                 # 2) Assemble a polite wave of up to 2 uncached patents (never exceeding remaining needed count)
@@ -822,11 +907,13 @@ class GooglePatentsClient:
                 while idx < total_cands and len(wave) < wave_size:
                     c_item = candidates[idx]
                     idx += 1
+                    if _is_excluded_publication(c_item["pub_number"]):
+                        continue
                     # Check cache in case second item in wave IS cached
                     c_cached = get_cached_patent(c_item["pub_number"], language)
                     if c_cached is not None:
                         fid = c_cached.family_id or c_item.get("family_id") or c_cached.pub_number
-                        if fid not in seen_family_ids and (c_cached.description_text or c_cached.claims_text):
+                        if fid not in seen_family_ids and _is_substantive_patent_doc(c_cached):
                             seen_family_ids.add(fid)
                             fetched_docs.append(c_cached)
                             if on_progress:
@@ -873,7 +960,7 @@ class GooglePatentsClient:
                     if fid in seen_family_ids:
                         continue
 
-                    if res.description_text or res.claims_text:
+                    if _is_substantive_patent_doc(res):
                         put_cached_patent(res)
                         seen_family_ids.add(fid)
                         fetched_docs.append(res)
@@ -885,8 +972,6 @@ class GooglePatentsClient:
                             )
                         if len(fetched_docs) >= target_count:
                             break
-                    elif res.abstract_text:
-                        abstract_only_backups.append(res)
 
                 # Polite jittered pacing between live waves to protect corporate IP reputation
                 if len(fetched_docs) < target_count and idx < total_cands and not rate_limited:
@@ -894,16 +979,6 @@ class GooglePatentsClient:
         finally:
             if client is not None:
                 await client.aclose()
-
-        # Only fall back to abstract-only records if fewer full-text specifications existed globally
-        if len(fetched_docs) < target_count and abstract_only_backups and not rate_limited:
-            for bdoc in abstract_only_backups:
-                fid = bdoc.family_id or bdoc.pub_number
-                if fid not in seen_family_ids:
-                    seen_family_ids.add(fid)
-                    fetched_docs.append(bdoc)
-                    if len(fetched_docs) >= target_count:
-                        break
 
         if rate_limited and len(fetched_docs) < max(5, target_count // 3):
             raise RuntimeError(

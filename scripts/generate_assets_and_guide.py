@@ -420,8 +420,9 @@ def generate_word_user_guide(icon_png: Path) -> Path:
         "(EN, DE, FR, ES, JA, ZH, or KO). Click 'Verify Entities' to preview matching INPADOC legal entity names and "
         "tick the subsidiaries you want included (or paste explicit publication numbers like EP4200317A1, WO2025110491A1). "
         "Choose the sample size (typically 25–50; strictly 1 publication per INPADOC patent family is selected) and click "
-        "'Run Rolling TM Simulation'. For non-EP offices lacking OPS full-text XML, the engine automatically retrieves "
-        "full-text & tables via Google Patents.",
+        "'Run Rolling TM Simulation'. Non-specification anomalies—such as Industrial Designs / Design Patents (e.g., CA...S, "
+        "USD...S1, CN...S), Plant Patents, search-report-only filings (A3/A4), and title/abstract-only stubs (< 250 words)—are "
+        "automatically excluded so every row is a genuine full-text utility specification.",
     )
     _add_bullet(
         doc,

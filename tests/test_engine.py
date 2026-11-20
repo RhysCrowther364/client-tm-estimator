@@ -253,6 +253,54 @@ class PatentTMEstimatorTests(unittest.TestCase):
                 conn.execute("DELETE FROM patent_docs WHERE cache_key = 'WO2099999999A1:EN'")
                 conn.commit()
 
+    def test_anomaly_exclusion_designs_and_stubs(self) -> None:
+        from app.patent_sources import _is_excluded_publication, _is_substantive_patent_doc
+
+        # Industrial designs (like CA241656S), US/CN/KR designs, plant patents, and A3 search reports must be excluded
+        for bad_pub in (
+            "CA241656S",
+            "USD1045678S1",
+            "CN308512345S",
+            "KR301234567S",
+            "USPP035123P2",
+            "EP4200317A3",
+            "WO2025110491A3",
+        ):
+            self.assertTrue(_is_excluded_publication(bad_pub), f"Should exclude {bad_pub}")
+
+        # Legitimate utility patent applications & grants must NOT be excluded
+        for good_pub in (
+            "WO2026185177A1",
+            "EP4123456B1",
+            "US20260240691A1",
+            "CA3189456A1",
+            "CA3189456C",
+            "KR20250012680A",
+            "CN117812345A",
+        ):
+            self.assertFalse(_is_excluded_publication(good_pub), f"Should keep {good_pub}")
+
+        # 3-word stub or short design claim must fail _is_substantive_patent_doc
+        stub_doc = PatentDocument(pub_number="WO2026000001A1", family_id="F_STUB", title="INJECTABLE MEDICAL DEVICE")
+        self.assertFalse(_is_substantive_patent_doc(stub_doc))
+
+        short_claim = PatentDocument(
+            pub_number="WO2026000002A1",
+            family_id="F_SHORT",
+            title="Medical Device",
+            claims_text="1. The ornamental design for an injectable medical device, as shown and described.",
+        )
+        self.assertFalse(_is_substantive_patent_doc(short_claim))
+
+        full_spec = PatentDocument(
+            pub_number="WO2026185177A1",
+            family_id="F_FULL",
+            title="Pharmaceutical Formulation",
+            description_text=" ".join(["The pharmaceutical composition comprises an active agent."] * 40),
+            claims_text="1. A pharmaceutical composition comprising an active agent.",
+        )
+        self.assertTrue(_is_substantive_patent_doc(full_spec))
+
 
 if __name__ == "__main__":
     unittest.main()
