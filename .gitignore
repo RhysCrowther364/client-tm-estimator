@@ -17,6 +17,7 @@ env/
 build/
 dist/
 release/*.exe
+release/*.zip
 
 # OS / Editor files
 .DS_Store

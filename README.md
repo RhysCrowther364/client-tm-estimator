@@ -55,6 +55,30 @@ Outputs are generated in `release/`:
 
 ---
 
+## Project Structure & Reusable Modules (For Future Automations)
+
+```text
+├── app/
+│   ├── patent_sources.py   # Reusable EPO OPS v3.2 OAuth2/CQL client + Google Patents client + .docx/.xml/.zip parser
+│   ├── patent_cache.py     # Reusable SQLite WAL local document & search cache
+│   ├── segmentation.py     # Patent-aware SRX sentence segmenter + MS Word vs Trados Studio 2022 word counters
+│   ├── tm_engine.py        # Sequential rolling Translation Memory fuzzy-matching engine (RapidFuzz)
+│   ├── rte_detector.py     # Table whole-number counter + single/multi-line NMR spectroscopic block detector
+│   ├── pdf_exporter.py     # Reusable RWS 2025 Brand-styled vector PDF report & chart generator (ReportLab)
+│   ├── store.py            # Async background job runner with SQLite persistence & SSE progress streaming
+│   ├── main.py             # Starlette local web API routes
+│   └── config.py           # Settings loader (works in both Python source mode and frozen PyInstaller .exe)
+├── static/                 # RWS Brand UI (index.html, styles.css, app.js, vendored Chart.js)
+├── scripts/
+│   └── generate_assets_and_guide.py  # Programmatic RWS custom .ico generator + branded Word (.docx) guide builder
+├── release/                # Ready-to-run standalone RWS_Patent_TM_Estimator.exe + Word User Guide
+├── tests/                  # Automated unit test suite (test_engine.py)
+├── desktop_app.py          # Standalone Windows desktop window wrapper (Edge/Chrome --app mode + auto-shutdown)
+└── build_desktop.bat       # One-click PyInstaller build script
+```
+
+---
+
 ## Running Tests
 
 ```powershell
